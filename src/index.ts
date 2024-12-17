@@ -131,7 +131,7 @@ app.post('/search', async (c) => {
       success: true,
       results: results.matches.map(match => ({ 
         id: match.id,
-        txt: match.metadata?.content || 'Not found'
+        txt: match.metadata?.text || 'Not found'
       }))
     });
 
@@ -147,18 +147,12 @@ app.post('/search', async (c) => {
 // POST 接口用于删除文档
 app.post('/delete', async (c) => {
   try {
-    const { id, confirmToken } = await c.req.json<{ 
+    const { id } = await c.req.json<{ 
       id: string;
-      confirmToken: string;
     }>();
     
     if (!id) {
       return c.json({ error: 'ID不能为空' }, 400);
-    }
-
-    // 检查确认 token
-    if (confirmToken !== c.env.AUTH_TOKEN) {
-      return c.json({ error: '确认token无效' }, 403);
     }
 
     const embeddings = new CloudflareWorkersAIEmbeddings({
