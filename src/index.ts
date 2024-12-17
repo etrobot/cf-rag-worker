@@ -34,25 +34,30 @@ async function upsertDocToVectorstore(
   vectorstore: CloudflareVectorizeStore,
   text: string
 ) {
-  // 创建文档对象，并确保 metadata 为空对象
-  const doc = new Document({ pageContent: text, metadata: {} });
-  doc.metadata = {};  // 确保 metadata 为空
+  // 先获取文本的向量嵌入
+  const embedding = await vectorstore.embeddings.embedQuery(text);
   
-  // 使用文本内容的哈希作为 ID
+  // 生成 ID
   const encoder = new TextEncoder();
   const insecureHash = await crypto.subtle.digest(
     'SHA-1',
-    encoder.encode(doc.pageContent)
+    encoder.encode(text)
   );
-  
-  // 将哈希转换为可读的十六进制字符串
   const hashArray = Array.from(new Uint8Array(insecureHash));
   const readableId = hashArray
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 
-  const result = await vectorstore.addDocuments([doc], { ids: [readableId] });
-  return result;
+  // 使用 upsert 方法，添加 metadata
+  const result = await vectorstore.index.upsert([{
+    id: readableId,
+    values: embedding,
+    metadata: {
+      text: text  // 存储原始文本到 metadata
+    }
+  }]);
+
+  return { id: readableId, result };
 }
 
 // POST 接口用于接收和存储文本
@@ -73,11 +78,13 @@ app.post('/store', async (c) => {
       index: c.env.VECTORIZE_INDEX
     });
 
-    await upsertDocToVectorstore(vectorstore, text);
+    const { id, result } = await upsertDocToVectorstore(vectorstore, text);
 
     return c.json({ 
       success: true, 
-      message: '文本已成功存储' 
+      message: '文本已成功存储',
+      id: id,
+      ids: result.ids
     });
 
   } catch (error) {
@@ -110,13 +117,21 @@ app.post('/search', async (c) => {
       index: c.env.VECTORIZE_INDEX
     });
 
-    // 使用 similaritySearchWithScore 但在返回时不包含 score
-    const results = await vectorstore.similaritySearchWithScore(query, limit);
+    // 获取查询文本的向量嵌入
+    const queryEmbedding = await embeddings.embedQuery(query);
+
+    // 直接使用 Vectorize API 进行查询
+    const results = await vectorstore.index.query(queryEmbedding, {
+      topK: limit,
+      returnValues: false,
+      returnMetadata: 'all'  // 返回所有 metadata
+    });
 
     return c.json({ 
       success: true,
-      results: results.map(([doc]) => ({ 
-        content: doc.pageContent,
+      results: results.matches.map(match => ({ 
+        id: match.id,
+        txt: match.metadata?.content || 'Not found'
       }))
     });
 
@@ -155,11 +170,13 @@ app.post('/delete', async (c) => {
       index: c.env.VECTORIZE_INDEX
     });
 
-    await vectorstore.delete({ ids: [id] });
+    // 使用 deleteByIds 方法
+    const result = await vectorstore.index.deleteByIds([id]);
 
     return c.json({ 
       success: true, 
-      message: '文档已成功删除'
+      message: '文档已成功删除',
+      mutationId: result.ids
     });
 
   } catch (error) {
