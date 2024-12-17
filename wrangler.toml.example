@@ -1,0 +1,15 @@
+name = "vector-store-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[[vectorize]]
+binding = "VECTORIZE_INDEX"
+index_name = "langchain_ai_docs_index"
+
+[ai]
+binding = "AI"
+
+[vars]
+CLOUDFLARE_ACCOUNT_ID=""
+CLOUDFLARE_WORKERSAI_API_TOKEN=""
+AUTH_TOKEN=""
