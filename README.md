@@ -41,7 +41,9 @@ wrangler vectorize create langchain_ai_docs_index --preset @cf/baai/bge-base-en-
 ```ini
 CLOUDFLARE_ACCOUNT_ID=你的账户ID
 CLOUDFLARE_WORKERSAI_API_TOKEN=你的API令牌
+AUTH_TOKEN=自定义token用于防刷
 ```
+复制 wrangler.toml.example 到 wrangler.toml 并填写必要的环境变量
 
 ## 4. 运行项目
 
