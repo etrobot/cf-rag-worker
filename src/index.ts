@@ -131,7 +131,7 @@ app.post('/search', async (c) => {
       success: true,
       results: results.matches.map(match => ({ 
         id: match.id,
-        txt: match.metadata?.text || 'Not found'
+        txt: match.metadata?.content || 'Not found'
       }))
     });
 
