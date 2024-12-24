@@ -32,38 +32,45 @@ app.use('/*', cors());
 // 向量化存储文本的函数
 async function upsertDocToVectorstore(
   vectorstore: CloudflareVectorizeStore,
-  text: string
+  text: string,
+  customId?: string
 ) {
-  // 先获取文本的向量嵌入
   const embedding = await vectorstore.embeddings.embedQuery(text);
   
-  // 生成 ID
-  const encoder = new TextEncoder();
-  const insecureHash = await crypto.subtle.digest(
-    'SHA-1',
-    encoder.encode(text)
-  );
-  const hashArray = Array.from(new Uint8Array(insecureHash));
-  const readableId = hashArray
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+  // 如果提供了自定义ID就使用它，否则生成哈希ID
+  const readableId = customId || await generateHashId(text);
 
-  // 使用 upsert 方法，添加 metadata
   const result = await vectorstore.index.upsert([{
     id: readableId,
     values: embedding,
     metadata: {
-      text: text  // 存储原始文本到 metadata
+      text: text
     }
   }]);
 
   return { id: readableId, result };
 }
 
+// 将哈希生成逻辑抽取为独立函数
+async function generateHashId(text: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const insecureHash = await crypto.subtle.digest(
+    'SHA-1',
+    encoder.encode(text)
+  );
+  const hashArray = Array.from(new Uint8Array(insecureHash));
+  return hashArray
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 // POST 接口用于接收和存储文本
 app.post('/store', async (c) => {
   try {
-    const { text } = await c.req.json<{ text: string }>();
+    const { text, id } = await c.req.json<{ 
+      text: string;
+      id?: string;
+    }>();
     
     if (!text) {
       return c.json({ error: '文本内容不能为空' }, 400);
@@ -78,13 +85,13 @@ app.post('/store', async (c) => {
       index: c.env.VECTORIZE_INDEX
     });
 
-    const { id, result } = await upsertDocToVectorstore(vectorstore, text);
+    const result = await upsertDocToVectorstore(vectorstore, text, id);
 
     return c.json({ 
       success: true, 
       message: '文本已成功存储',
-      id: id,
-      ids: result.ids
+      id: result.id,
+      ids: result.result.ids
     });
 
   } catch (error) {
